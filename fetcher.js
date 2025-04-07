@@ -12,87 +12,115 @@ const PowerballData = (() => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             
-            // Get all drawing rows
-            const drawingRows = Array.from(doc.querySelectorAll('.draw-card, .drawing-item, tr'));
             const results = [];
-
-            // Process each drawing row
-            drawingRows.forEach(row => {
-                try {
-                    // Skip header rows
-                    if (row.querySelector('th') || row.classList.contains('header')) {
-                        return;
-                    }
+            let dateBlock = null;
+            let numbers = [];
+            let powerball = null;
+            let powerPlay = null;
+            
+            // Process each line of text in the document
+            const textNodes = [];
+            const walker = document.createTreeWalker(
+                doc.body,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+            
+            let node;
+            while (node = walker.nextNode()) {
+                const text = node.nodeValue.trim();
+                if (text) {
+                    textNodes.push(text);
+                }
+            }
+            
+            // Process the extracted text
+            for (let i = 0; i < textNodes.length; i++) {
+                const line = textNodes[i].trim();
+                
+                // Look for date line (e.g., "Sat, Apr 5, 2025")
+                if (line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]+ \d+, \d{4}$/) || 
+                    line.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]+ \d+$/)) {
                     
-                    // Extract date
-                    const dateEl = row.querySelector('.date, td:first-child');
-                    if (!dateEl) return;
-                    
-                    const dateText = dateEl.textContent.trim();
-                    // Verify this is a date row (contains day of week)
-                    if (!dateText.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/)) {
-                        return;
-                    }
-                    
-                    // Extract white balls and powerball
-                    const allNumberCells = Array.from(row.querySelectorAll('.white-ball, .red-ball, .powerball, td:not(:first-child):not(:last-child)'));
-                    
-                    // Need at least 6 numbers (5 white balls + 1 powerball)
-                    if (allNumberCells.length < 6) return;
-                    
-                    // Extract white balls (first 5 numbers)
-                    const whiteBalls = allNumberCells.slice(0, 5).map(cell => {
-                        const text = cell.textContent.trim();
-                        return parseInt(text, 10);
-                    });
-                    
-                    // Extract powerball (6th number)
-                    const powerballNum = parseInt(allNumberCells[5].textContent.trim(), 10);
-                    
-                    // Extract Power Play
-                    const powerPlayEl = row.querySelector('.power-play, td:last-child');
-                    let powerPlay = "N/A";
-                    if (powerPlayEl) {
-                        powerPlay = powerPlayEl.textContent.trim();
-                        // If it's not in format "2x", "3x", etc. try to find it
-                        if (!powerPlay.match(/\d+x/)) {
-                            // Check for power play specifically
-                            const powerPlayText = row.textContent.includes('Power Play') ? 
-                                row.textContent.match(/Power Play[:\s]+(\d+x)/i) : null;
-                            
-                            if (powerPlayText && powerPlayText[1]) {
-                                powerPlay = powerPlayText[1];
-                            }
-                        }
-                    }
-                    
-                    // Validate data
-                    if (whiteBalls.length === 5 && 
-                        whiteBalls.every(n => !isNaN(n) && n >= 1 && n <= 69) && 
-                        !isNaN(powerballNum) && powerballNum >= 1 && powerballNum <= 26) {
-                        
+                    // If we already have a date, save the previous entry
+                    if (dateBlock && numbers.length === 5 && powerball !== null) {
                         results.push({
-                            date: dateText,
-                            numbers: whiteBalls,
-                            powerball: powerballNum,
-                            powerPlay: powerPlay
+                            date: dateBlock,
+                            numbers: [...numbers],
+                            powerball,
+                            powerPlay: powerPlay || "N/A"
                         });
                     }
-                } catch (rowError) {
-                    console.warn('Error parsing a row:', rowError);
+                    
+                    // Start a new entry
+                    dateBlock = line;
+                    numbers = [];
+                    powerball = null;
+                    powerPlay = null;
+                    continue;
                 }
-            });
+                
+                // If we found a date, look for numbers
+                if (dateBlock) {
+                    // If it's just a number
+                    if (/^\d+$/.test(line)) {
+                        const num = parseInt(line, 10);
+                        
+                        if (numbers.length < 5) {
+                            numbers.push(num);
+                        } else if (powerball === null) {
+                            powerball = num;
+                        }
+                    }
+                    // If it's "Power Play"
+                    else if (line === "Power Play") {
+                        // The next line should be the power play value
+                        if (i + 1 < textNodes.length) {
+                            powerPlay = textNodes[i + 1].trim();
+                            i++; // Skip the next line
+                        }
+                    }
+                }
+            }
+            
+            // Don't forget the last entry
+            if (dateBlock && numbers.length === 5 && powerball !== null) {
+                results.push({
+                    date: dateBlock,
+                    numbers: [...numbers],
+                    powerball,
+                    powerPlay: powerPlay || "N/A"
+                });
+            }
+            
+            // Validate results
+            for (let i = results.length - 1; i >= 0; i--) {
+                const result = results[i];
+                
+                // Make sure each result has 5 white balls and 1 powerball
+                if (result.numbers.length !== 5 || isNaN(result.powerball)) {
+                    results.splice(i, 1);
+                } else {
+                    // Validate number ranges
+                    if (!result.numbers.every(num => num >= 1 && num <= 69)) {
+                        results.splice(i, 1);
+                    } else if (result.powerball < 1 || result.powerball > 26) {
+                        results.splice(i, 1);
+                    }
+                }
+            }
             
             return results;
         } catch (error) {
-            console.error('Error parsing HTML content:', error);
+            console.error('Error parsing HTML:', error);
             return [];
         }
     };
     
     /**
-     * Parse Powerball data from text format often found in website content
-     * @param {string} content - Raw content from Powerball website
+     * Parse drawing data directly from website text content
+     * @param {string} content - Text content from Powerball website
      * @returns {Array} - Array of drawing data objects
      */
     const parseFromTextContent = (content) => {
@@ -152,8 +180,8 @@ const PowerballData = (() => {
                             powerPlay = lines[i + 1].trim();
                             i++; // Skip the next line
                         }
-                    } else if (line.match(/\d+x/)) {
-                        // If it looks like a power play multiplier
+                    } else if (line.match(/^\d+x$/)) {
+                        // If it's just a multiplier like "4x"
                         powerPlay = line;
                     }
                 }
@@ -188,223 +216,341 @@ const PowerballData = (() => {
             
             return results;
         } catch (error) {
-            console.error('Error parsing from text:', error);
+            console.error('Error parsing text content:', error);
             return [];
         }
     };
     
     /**
-     * Function to fetch data from Powerball website
+     * Handles pagination by loading all pages from the Powerball website
      * @param {string} startDate - Start date in YYYY-MM-DD format
      * @param {string} endDate - End date in YYYY-MM-DD format
-     * @returns {Promise} - Promise resolving to drawing data
+     * @returns {Promise<Array>} - Promise resolving to all drawing data
      */
-    const fetchFromWebsite = async (startDate, endDate) => {
-        const results = [];
-        let hasMorePages = true;
-        let page = 1;
+    const fetchAllPages = async (startDate, endDate) => {
+        let allResults = [];
+        let pageNum = 1;
+        let hasMoreData = true;
+        
+        // Detect if the browser is running in a CORS environment where we need a proxy
+        const needsProxy = window.location.protocol === 'http:' || 
+                          window.location.protocol === 'https:' &&
+                          window.location.hostname !== 'powerball.com';
+        
+        const getUrl = (page) => {
+            const baseUrl = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}&page=${page}`;
+            return needsProxy ? `https://corsproxy.io/?${encodeURIComponent(baseUrl)}` : baseUrl;
+        };
         
         try {
-            while (hasMorePages) {
-                // Format the URL with the date parameters and page number
-                const url = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}&page=${page}`;
+            while (hasMoreData) {
+                console.log(`Fetching page ${pageNum} of Powerball results...`);
                 
-                // Use a CORS proxy to avoid CORS errors
-                // In a production environment, you would use a server-side proxy
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                
-                console.log(`Fetching page ${page} of drawings...`);
-                const response = await fetch(proxyUrl);
+                // Fetch the current page
+                const response = await fetch(getUrl(pageNum));
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
+                    throw new Error(`HTTP error: ${response.status}`);
                 }
                 
                 const html = await response.text();
                 
-                // Parse HTML to extract drawing data
-                const pageResults = parseHTML(html);
+                // Parse the data from this page
+                const pageResults = parseFromTextContent(html);
                 
                 if (pageResults.length > 0) {
-                    // Add this page's results to our collection
-                    results.push(...pageResults);
+                    console.log(`Found ${pageResults.length} drawings on page ${pageNum}`);
+                    allResults = [...allResults, ...pageResults];
                     
-                    // Check if there might be more pages
-                    if (html.includes('"Load More"') || html.includes('"load-more"') || 
-                        html.includes('Load More') || html.includes('pagination') ||
-                        pageResults.length >= 20) { // Many sites show 20 items per page
+                    // Check if there's a "Load More" button or similar pagination indicator
+                    if (html.includes('Load More') || html.includes('load-more') || 
+                        html.includes('pagination') || html.includes('pager')) {
+                        pageNum++;
                         
-                        page++;
-                        
-                        // Safety check - don't fetch too many pages
-                        if (page > 10) {
-                            console.warn('Reached maximum page limit (10 pages)');
-                            hasMorePages = false;
+                        // Safety check - don't go beyond a reasonable number of pages
+                        if (pageNum > 50) {
+                            console.warn('Reached maximum page limit (50)');
+                            hasMoreData = false;
                         }
+                        
+                        // Add a small delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 300));
                     } else {
-                        hasMorePages = false;
+                        // If no indication of more pages, assume we're done
+                        hasMoreData = false;
                     }
                 } else {
-                    // If no results on this page, assume we've reached the end
-                    hasMorePages = false;
-                }
-                
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            console.log(`Total drawings fetched: ${results.length}`);
-            
-            // If still no results, try text parsing as a fallback
-            if (results.length === 0) {
-                // Try to fetch again with a different approach
-                const url = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}`;
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                
-                const response = await fetch(proxyUrl);
-                const text = await response.text();
-                
-                const textResults = parseFromTextContent(text);
-                if (textResults.length > 0) {
-                    return textResults;
+                    // No results on this page, we're done
+                    hasMoreData = false;
                 }
             }
             
-            return results;
+            console.log(`Total drawings fetched: ${allResults.length}`);
+            return allResults;
+            
         } catch (error) {
-            console.error('Error fetching from Powerball website:', error);
+            console.error('Error fetching all pages:', error);
             throw error;
         }
     };
     
     /**
-     * Attempts to fetch data directly from the Powerball API endpoints
+     * Fetches Powerball data directly by simulating browser requests to the API
      * @param {string} startDate - Start date in YYYY-MM-DD format
      * @param {string} endDate - End date in YYYY-MM-DD format
-     * @returns {Promise} - Promise resolving to drawing data
+     * @returns {Promise<Array>} - Promise resolving to drawing data
      */
-    const fetchFromApi = async (startDate, endDate) => {
+    const fetchDirectFromAPI = async (startDate, endDate) => {
         try {
-            // The Powerball site likely has an API endpoint that powers their results page
-            // This is an educated guess at what the endpoint might be
-            const apiUrl = `https://www.powerball.com/api/v1/drawings/powerball?_format=json&from=${startDate}&to=${endDate}`;
+            // We'll try to find the actual API endpoint the Powerball site uses
+            const apiUrl = `https://www.powerball.com/api/v1/drawings/powerball?startDate=${startDate}&endDate=${endDate}&_format=json`;
             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
             
             const response = await fetch(proxyUrl);
             
             if (!response.ok) {
-                throw new Error(`API HTTP error! Status: ${response.status}`);
+                throw new Error(`API HTTP error: ${response.status}`);
             }
             
             const data = await response.json();
             
-            // Transform the API response to our standard format
-            const results = data.map(item => {
-                // Extract the 5 white balls and 1 powerball
-                const allNumbers = Array.isArray(item.field_winning_numbers)
-                    ? item.field_winning_numbers
-                    : String(item.field_winning_numbers).split(/\s+/).map(n => parseInt(n, 10));
+            // Convert API data to our standard format
+            return data.map(item => {
+                // Different API responses might have different structures
+                // This is a guess based on common API patterns
+                let whiteBalls = [];
+                let powerballNum = null;
                 
-                const whiteBalls = allNumbers.slice(0, 5);
-                const powerball = allNumbers[5];
-                
-                // Format the date
-                const drawDate = new Date(item.field_draw_date);
-                const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
-                const formattedDate = drawDate.toLocaleDateString('en-US', options)
-                    .replace(/,\s*(\d{4})$/, ', $1'); // Ensure format: "Day, Mon DD, YYYY"
+                if (item.winning_numbers || item.numbers) {
+                    const numbers = (item.winning_numbers || item.numbers || '').split(/[\s,]+/).map(Number);
+                    whiteBalls = numbers.slice(0, 5);
+                    powerballNum = numbers[5];
+                } else if (item.white_balls && item.powerball) {
+                    whiteBalls = item.white_balls;
+                    powerballNum = item.powerball;
+                }
                 
                 return {
-                    date: formattedDate,
+                    date: item.draw_date || item.date,
                     numbers: whiteBalls,
-                    powerball: powerball,
-                    powerPlay: item.field_multiplier ? `${item.field_multiplier}x` : "N/A"
+                    powerball: powerballNum,
+                    powerPlay: item.power_play || item.multiplier || "N/A"
                 };
             });
             
-            return results;
         } catch (error) {
-            console.warn('Error fetching from API:', error);
-            // This is expected to fail if the API endpoint is incorrect
-            // We'll let the calling function try the website parsing approach
+            console.warn('Direct API fetch failed:', error);
+            // This is expected if the API endpoint is incorrect
             throw error;
         }
     };
     
     /**
-     * Main data fetching function
+     * Alternative method to fetch data: Break the date range into chunks
+     * @param {string} startDate - Start date in YYYY-MM-DD format
+     * @param {string} endDate - End date in YYYY-MM-DD format
+     * @returns {Promise<Array>} - Promise resolving to drawing data
+     */
+    const fetchByDateChunks = async (startDate, endDate) => {
+        try {
+            // Convert dates to Date objects
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            // Calculate the total number of days
+            const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+            
+            // If the range is small enough, fetch it as one chunk
+            if (totalDays <= 90) {
+                return await fetchAllPages(startDate, endDate);
+            }
+            
+            // Split into 90-day chunks
+            const allResults = [];
+            let currentStart = new Date(start);
+            
+            while (currentStart < end) {
+                // Calculate chunk end date (90 days later or the overall end date)
+                let currentEnd = new Date(currentStart);
+                currentEnd.setDate(currentStart.getDate() + 90);
+                
+                if (currentEnd > end) {
+                    currentEnd = end;
+                }
+                
+                // Format dates for API
+                const formatDate = (date) => {
+                    return date.toISOString().split('T')[0]; // YYYY-MM-DD
+                };
+                
+                console.log(`Fetching chunk: ${formatDate(currentStart)} to ${formatDate(currentEnd)}`);
+                
+                // Fetch this chunk
+                const chunkResults = await fetchAllPages(
+                    formatDate(currentStart),
+                    formatDate(currentEnd)
+                );
+                
+                // Add to results
+                allResults.push(...chunkResults);
+                
+                // Move to next chunk
+                currentStart = new Date(currentEnd);
+                currentStart.setDate(currentStart.getDate() + 1);
+                
+                // Add a delay between chunks
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            // Remove any duplicates by date
+            const uniqueResults = [];
+            const datesSeen = new Set();
+            
+            allResults.forEach(result => {
+                if (!datesSeen.has(result.date)) {
+                    datesSeen.add(result.date);
+                    uniqueResults.push(result);
+                }
+            });
+            
+            console.log(`Total unique drawings fetched: ${uniqueResults.length}`);
+            return uniqueResults;
+            
+        } catch (error) {
+            console.error('Error fetching by date chunks:', error);
+            throw error;
+        }
+    };
+    
+    /**
+     * Additional method: Use a headless browser or scraping service
+     * This is a placeholder for server-side implementation
+     */
+    const fetchUsingExternalScraper = async (startDate, endDate) => {
+        // This would typically be implemented on the server side using:
+        // - A headless browser like Puppeteer or Playwright
+        // - A scraping service API
+        // - A server-side proxy with proper sessions and cookies
+        
+        // For client-side, we'll throw an error to fall back to other methods
+        throw new Error("External scraper not implemented in client-side code");
+    };
+    
+    /**
+     * Main data fetching function that tries multiple approaches
      * @param {string} startDate - Start date in YYYY-MM-DD format
      * @param {string} endDate - End date in YYYY-MM-DD format
      * @returns {Promise} - Promise resolving to drawing data and source
      */
     const fetchData = async (startDate, endDate) => {
-        // Show a warning in the console about CORS issues
-        console.info('Note: This app may need a CORS proxy to fetch live data from Powerball.com.');
+        console.log(`Fetching Powerball data from ${startDate} to ${endDate}`);
         
+        // Arrays to store results and track which methods succeeded
         let results = [];
         let source = "";
+        let successfulMethod = "";
         
-        try {
-            // First try the API approach
+        // Try all methods in sequence until one works
+        const methods = [
+            { name: "Direct API", fn: fetchDirectFromAPI },
+            { name: "Date Chunking", fn: fetchByDateChunks },
+            { name: "All Pages", fn: fetchAllPages },
+            { name: "External Scraper", fn: fetchUsingExternalScraper }
+        ];
+        
+        for (const method of methods) {
             try {
-                console.log('Attempting to fetch data from Powerball API...');
-                results = await fetchFromApi(startDate, endDate);
-                source = "Powerball.com API";
-                console.log(`Successfully fetched ${results.length} drawings from API.`);
-            } catch (apiError) {
-                console.warn('API fetch failed, falling back to website parsing...');
+                console.log(`Trying method: ${method.name}`);
+                const methodResults = await method.fn(startDate, endDate);
                 
-                // If API fails, try website parsing
-                results = await fetchFromWebsite(startDate, endDate);
-                source = "Powerball.com website";
-                console.log(`Successfully fetched ${results.length} drawings from website.`);
+                if (methodResults && methodResults.length > 0) {
+                    console.log(`Method ${method.name} succeeded with ${methodResults.length} results`);
+                    results = methodResults;
+                    successfulMethod = method.name;
+                    source = `${method.name} method`;
+                    break;
+                }
+            } catch (error) {
+                console.warn(`Method ${method.name} failed:`, error);
+                // Continue to next method
             }
-            
-            // If we got results, filter by date range
-            if (results && results.length > 0) {
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999); // Include the entire end day
-                
-                // Add year if missing in date string
-                const fixDate = (dateStr) => {
-                    if (!dateStr.includes(', 20')) {
-                        const currentYear = new Date().getFullYear();
-                        const parts = dateStr.split(', ');
-                        return `${parts[0]}, ${parts[1]}, ${currentYear}`;
-                    }
-                    return dateStr;
-                };
-                
-                const filteredResults = results.filter(entry => {
-                    try {
-                        const entryDate = new Date(fixDate(entry.date));
-                        return entryDate >= start && entryDate <= end;
-                    } catch (dateError) {
-                        console.warn(`Invalid date format: ${entry.date}`);
-                        return false;
-                    }
-                });
-                
-                console.log(`Filtered to ${filteredResults.length} drawings within date range.`);
-                
-                return {
-                    data: filteredResults,
-                    source: `${filteredResults.length} drawings from ${source}`
-                };
-            } else {
-                throw new Error("No drawings found for the specified date range.");
-            }
-        } catch (error) {
-            console.error('Error in fetchData:', error);
-            throw error;
         }
+        
+        // If all methods failed but we have content from fetcher.js, parse it directly
+        if (results.length === 0 && typeof document !== 'undefined') {
+            try {
+                console.log("Trying direct content parsing as last resort");
+                const content = document.body.innerText || document.body.textContent;
+                results = parseFromTextContent(content);
+                
+                if (results.length > 0) {
+                    source = "Direct content parsing";
+                    successfulMethod = "Content Parsing";
+                }
+            } catch (contentError) {
+                console.warn("Content parsing failed:", contentError);
+            }
+        }
+        
+        // Final fallback for the example content you provided
+        if (results.length === 0) {
+            console.log("All methods failed. Using provided example content.");
+            const exampleContent = document.querySelector('pre')?.textContent || '';
+            
+            if (exampleContent.includes('Powerball') && exampleContent.includes('Power Play')) {
+                results = parseFromTextContent(exampleContent);
+                source = "Example content";
+                successfulMethod = "Example Content";
+            }
+        }
+        
+        // Filter results by date range
+        if (results.length > 0) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999); // Include the entire end day
+            
+            // Add year if missing in date string (assuming current year)
+            const fixDate = (dateStr) => {
+                if (!dateStr.includes(', 20')) {
+                    const currentYear = new Date().getFullYear();
+                    const parts = dateStr.split(', ');
+                    return `${parts[0]}, ${parts[1]}, ${currentYear}`;
+                }
+                return dateStr;
+            };
+            
+            const filteredResults = results.filter(entry => {
+                try {
+                    const entryDate = new Date(fixDate(entry.date));
+                    return entryDate >= start && entryDate <= end;
+                } catch (dateError) {
+                    console.warn(`Invalid date format: ${entry.date}`);
+                    return false;
+                }
+            });
+            
+            // Sort by date (newest first)
+            filteredResults.sort((a, b) => {
+                return new Date(fixDate(b.date)) - new Date(fixDate(a.date));
+            });
+            
+            console.log(`Filtered to ${filteredResults.length} drawings within date range.`);
+            
+            return {
+                data: filteredResults,
+                source: `${filteredResults.length} drawings from ${source}`
+            };
+        }
+        
+        // If we still have no results, throw an error
+        throw new Error("Unable to retrieve Powerball data for the selected date range. Please try a different date range or check your internet connection.");
     };
-
-    // Public methods
+    
+    // Return public methods
     return {
         fetchData,
-        parseHTML,
-        parseFromTextContent
+        parseFromTextContent,
+        parseHTML
     };
 })();
