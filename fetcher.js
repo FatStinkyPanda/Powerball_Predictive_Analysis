@@ -2,327 +2,101 @@
  * PowerballData - Module for fetching and parsing Powerball drawing data
  */
 const PowerballData = (() => {
-    // Store raw Powerball content from the provided URL
-    const powerballRawContent = `Previous Results | Powerball
-Skip to content.
-Powerball
-Games
-Powerball
-Lotto America
-2by2
-Double Play
-Jackpot USA
-Results
-Previous Results
-Check Your Numbers
-Watch the Drawing
-Winner Stories
-More
-Latest News
-Media Center
-FAQs
-Privacy Policy
-Terms & Conditions
-Play Responsibly
-NASCAR Powerball Playoff
-Shop
-Previous Results
-Are you holding a winning ticket?
-Game Name
-2by2
-Double Play
-Lotto America
-Powerball
-Start Date
-End Date
-Search
-Clear
-Sat, Apr 5, 2025
-4
-23
-30
-46
-62
-2
-Power Play
-4x
-Wed, Apr 2, 2025
-5
-17
-41
-64
-69
-1
-Power Play
-2x
-Mon, Mar 31, 2025
-12
-41
-44
-52
-64
-25
-Power Play
-2x
-Sat, Mar 29, 2025
-7
-11
-21
-53
-61
-2
-Power Play
-3x
-Wed, Mar 26, 2025
-5
-20
-29
-39
-53
-6
-Power Play
-3x
-Mon, Mar 24, 2025
-6
-23
-35
-36
-47
-12
-Power Play
-2x
-Sat, Mar 22, 2025
-6
-7
-25
-46
-57
-12
-Power Play
-3x
-Wed, Mar 19, 2025
-8
-11
-21
-49
-59
-15
-Power Play
-2x
-Mon, Mar 17, 2025
-11
-18
-23
-38
-60
-9
-Power Play
-2x
-Sat, Mar 15, 2025
-12
-28
-33
-36
-54
-5
-Power Play
-3x
-Wed, Mar 12, 2025
-11
-13
-28
-51
-58
-1
-Power Play
-2x
-Mon, Mar 10, 2025
-17
-40
-47
-50
-55
-6
-Power Play
-2x
-Sat, Mar 8, 2025
-2
-4
-16
-23
-63
-13
-Power Play
-3x
-Wed, Mar 5, 2025
-24
-28
-40
-63
-65
-20
-Power Play
-3x
-Mon, Mar 3, 2025
-18
-20
-50
-52
-56
-20
-Power Play
-2x
-Sat, Mar 1, 2025
-2
-23
-36
-44
-49
-25
-Power Play
-3x
-Wed, Feb 26, 2025
-28
-48
-55
-60
-62
-20
-Power Play
-2x
-Mon, Feb 24, 2025
-10
-11
-34
-59
-68
-14
-Power Play
-3x
-Sat, Feb 22, 2025
-7
-18
-22
-50
-65
-15
-Power Play
-2x
-Wed, Feb 19, 2025
-6
-21
-28
-49
-60
-20
-Power Play
-2x
-Mon, Feb 17, 2025
-4
-44
-47
-52
-57
-9
-Power Play
-4x
-Sat, Feb 15, 2025
-3
-16
-45
-54
-56
-12
-Power Play
-2x
-Wed, Feb 12, 2025
-21
-32
-36
-45
-49
-18
-Power Play
-2x
-Mon, Feb 10, 2025
-2
-17
-18
-29
-43
-3
-Power Play
-3x
-Sat, Feb 8, 2025
-23
-44
-57
-60
-62
-9
-Power Play
-2x
-Wed, Feb 5, 2025
-19
-27
-30
-50
-62
-14
-Power Play
-3x
-Mon, Feb 3, 2025
-12
-37
-47
-54
-60
-17
-Power Play
-3x
-Sat, Feb 1, 2025
-23
-29
-32
-49
-61
-8
-Power Play
-2x
-Wed, Jan 29, 2025
-8
-12
-31
-33
-38
-18
-Power Play
-3x
-Mon, Jan 27, 2025
-2
-40
-47
-53
-55
-20
-Power Play
-2x
-Load More
-Powerball
-Media Center
-Legal
-Privacy
-español
-The Multi-State Lottery Association makes every effort to ensure the accuracy of winning numbers and other information. Official winning numbers are those selected in the respective drawings and recorded under the observation of an independent accounting firm. In the event of a discrepancy, the official drawing results shall prevail.  All winning tickets must be redeemed in the state/jurisdiction in which they are sold. © 2025 Multi-State Lottery Association. All Rights Reserved.`;
-
     /**
-     * Parse data from the provided Powerball content
+     * Parse HTML content from Powerball website
+     * @param {string} html - HTML content from Powerball website
+     * @returns {Array} - Array of drawing data objects
+     */
+    const parseHTML = (html) => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Get all drawing rows
+            const drawingRows = Array.from(doc.querySelectorAll('.draw-card, .drawing-item, tr'));
+            const results = [];
+
+            // Process each drawing row
+            drawingRows.forEach(row => {
+                try {
+                    // Skip header rows
+                    if (row.querySelector('th') || row.classList.contains('header')) {
+                        return;
+                    }
+                    
+                    // Extract date
+                    const dateEl = row.querySelector('.date, td:first-child');
+                    if (!dateEl) return;
+                    
+                    const dateText = dateEl.textContent.trim();
+                    // Verify this is a date row (contains day of week)
+                    if (!dateText.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),/)) {
+                        return;
+                    }
+                    
+                    // Extract white balls and powerball
+                    const allNumberCells = Array.from(row.querySelectorAll('.white-ball, .red-ball, .powerball, td:not(:first-child):not(:last-child)'));
+                    
+                    // Need at least 6 numbers (5 white balls + 1 powerball)
+                    if (allNumberCells.length < 6) return;
+                    
+                    // Extract white balls (first 5 numbers)
+                    const whiteBalls = allNumberCells.slice(0, 5).map(cell => {
+                        const text = cell.textContent.trim();
+                        return parseInt(text, 10);
+                    });
+                    
+                    // Extract powerball (6th number)
+                    const powerballNum = parseInt(allNumberCells[5].textContent.trim(), 10);
+                    
+                    // Extract Power Play
+                    const powerPlayEl = row.querySelector('.power-play, td:last-child');
+                    let powerPlay = "N/A";
+                    if (powerPlayEl) {
+                        powerPlay = powerPlayEl.textContent.trim();
+                        // If it's not in format "2x", "3x", etc. try to find it
+                        if (!powerPlay.match(/\d+x/)) {
+                            // Check for power play specifically
+                            const powerPlayText = row.textContent.includes('Power Play') ? 
+                                row.textContent.match(/Power Play[:\s]+(\d+x)/i) : null;
+                            
+                            if (powerPlayText && powerPlayText[1]) {
+                                powerPlay = powerPlayText[1];
+                            }
+                        }
+                    }
+                    
+                    // Validate data
+                    if (whiteBalls.length === 5 && 
+                        whiteBalls.every(n => !isNaN(n) && n >= 1 && n <= 69) && 
+                        !isNaN(powerballNum) && powerballNum >= 1 && powerballNum <= 26) {
+                        
+                        results.push({
+                            date: dateText,
+                            numbers: whiteBalls,
+                            powerball: powerballNum,
+                            powerPlay: powerPlay
+                        });
+                    }
+                } catch (rowError) {
+                    console.warn('Error parsing a row:', rowError);
+                }
+            });
+            
+            return results;
+        } catch (error) {
+            console.error('Error parsing HTML content:', error);
+            return [];
+        }
+    };
+    
+    /**
+     * Parse Powerball data from text format often found in website content
      * @param {string} content - Raw content from Powerball website
      * @returns {Array} - Array of drawing data objects
      */
-    const parseFromProvidedContent = (content) => {
+    const parseFromTextContent = (content) => {
         try {
-            // This function extracts Powerball drawing data from the provided text content
             const lines = content.split('\n');
             const results = [];
             
@@ -378,6 +152,9 @@ The Multi-State Lottery Association makes every effort to ensure the accuracy of
                             powerPlay = lines[i + 1].trim();
                             i++; // Skip the next line
                         }
+                    } else if (line.match(/\d+x/)) {
+                        // If it looks like a power play multiplier
+                        powerPlay = line;
                     }
                 }
             }
@@ -411,7 +188,7 @@ The Multi-State Lottery Association makes every effort to ensure the accuracy of
             
             return results;
         } catch (error) {
-            console.error('Error parsing provided content:', error);
+            console.error('Error parsing from text:', error);
             return [];
         }
     };
@@ -423,21 +200,133 @@ The Multi-State Lottery Association makes every effort to ensure the accuracy of
      * @returns {Promise} - Promise resolving to drawing data
      */
     const fetchFromWebsite = async (startDate, endDate) => {
+        const results = [];
+        let hasMorePages = true;
+        let page = 1;
+        
         try {
-            // Format the URL with the date parameters
-            const url = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}`;
+            while (hasMorePages) {
+                // Format the URL with the date parameters and page number
+                const url = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}&page=${page}`;
+                
+                // Use a CORS proxy to avoid CORS errors
+                // In a production environment, you would use a server-side proxy
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                
+                console.log(`Fetching page ${page} of drawings...`);
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
+                const html = await response.text();
+                
+                // Parse HTML to extract drawing data
+                const pageResults = parseHTML(html);
+                
+                if (pageResults.length > 0) {
+                    // Add this page's results to our collection
+                    results.push(...pageResults);
+                    
+                    // Check if there might be more pages
+                    if (html.includes('"Load More"') || html.includes('"load-more"') || 
+                        html.includes('Load More') || html.includes('pagination') ||
+                        pageResults.length >= 20) { // Many sites show 20 items per page
+                        
+                        page++;
+                        
+                        // Safety check - don't fetch too many pages
+                        if (page > 10) {
+                            console.warn('Reached maximum page limit (10 pages)');
+                            hasMorePages = false;
+                        }
+                    } else {
+                        hasMorePages = false;
+                    }
+                } else {
+                    // If no results on this page, assume we've reached the end
+                    hasMorePages = false;
+                }
+                
+                // Small delay to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
             
-            // In a real application, you would fetch from the actual URL
-            // For this demo, we'll use the provided content directly
-            console.warn("Direct website fetching is simulated - using provided content");
+            console.log(`Total drawings fetched: ${results.length}`);
             
-            // Simulate a network delay
-            await new Promise(resolve => setTimeout(resolve, 800));
+            // If still no results, try text parsing as a fallback
+            if (results.length === 0) {
+                // Try to fetch again with a different approach
+                const url = `https://www.powerball.com/previous-results?gc=powerball&sd=${startDate}&ed=${endDate}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                
+                const response = await fetch(proxyUrl);
+                const text = await response.text();
+                
+                const textResults = parseFromTextContent(text);
+                if (textResults.length > 0) {
+                    return textResults;
+                }
+            }
             
-            // Parse and return the data
-            return parseFromProvidedContent(powerballRawContent);
+            return results;
         } catch (error) {
-            console.warn('Error fetching from website:', error.message);
+            console.error('Error fetching from Powerball website:', error);
+            throw error;
+        }
+    };
+    
+    /**
+     * Attempts to fetch data directly from the Powerball API endpoints
+     * @param {string} startDate - Start date in YYYY-MM-DD format
+     * @param {string} endDate - End date in YYYY-MM-DD format
+     * @returns {Promise} - Promise resolving to drawing data
+     */
+    const fetchFromApi = async (startDate, endDate) => {
+        try {
+            // The Powerball site likely has an API endpoint that powers their results page
+            // This is an educated guess at what the endpoint might be
+            const apiUrl = `https://www.powerball.com/api/v1/drawings/powerball?_format=json&from=${startDate}&to=${endDate}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`;
+            
+            const response = await fetch(proxyUrl);
+            
+            if (!response.ok) {
+                throw new Error(`API HTTP error! Status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Transform the API response to our standard format
+            const results = data.map(item => {
+                // Extract the 5 white balls and 1 powerball
+                const allNumbers = Array.isArray(item.field_winning_numbers)
+                    ? item.field_winning_numbers
+                    : String(item.field_winning_numbers).split(/\s+/).map(n => parseInt(n, 10));
+                
+                const whiteBalls = allNumbers.slice(0, 5);
+                const powerball = allNumbers[5];
+                
+                // Format the date
+                const drawDate = new Date(item.field_draw_date);
+                const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+                const formattedDate = drawDate.toLocaleDateString('en-US', options)
+                    .replace(/,\s*(\d{4})$/, ', $1'); // Ensure format: "Day, Mon DD, YYYY"
+                
+                return {
+                    date: formattedDate,
+                    numbers: whiteBalls,
+                    powerball: powerball,
+                    powerPlay: item.field_multiplier ? `${item.field_multiplier}x` : "N/A"
+                };
+            });
+            
+            return results;
+        } catch (error) {
+            console.warn('Error fetching from API:', error);
+            // This is expected to fail if the API endpoint is incorrect
+            // We'll let the calling function try the website parsing approach
             throw error;
         }
     };
@@ -446,79 +335,76 @@ The Multi-State Lottery Association makes every effort to ensure the accuracy of
      * Main data fetching function
      * @param {string} startDate - Start date in YYYY-MM-DD format
      * @param {string} endDate - End date in YYYY-MM-DD format
-     * @param {string} providedContent - Raw content to parse (optional)
      * @returns {Promise} - Promise resolving to drawing data and source
      */
-    const fetchData = (startDate, endDate, providedContent = null) => {
-        return new Promise((resolve, reject) => {
+    const fetchData = async (startDate, endDate) => {
+        // Show a warning in the console about CORS issues
+        console.info('Note: This app may need a CORS proxy to fetch live data from Powerball.com.');
+        
+        let results = [];
+        let source = "";
+        
+        try {
+            // First try the API approach
             try {
-                // Use either provided content or fallback to raw content
-                const contentToUse = providedContent || powerballRawContent;
+                console.log('Attempting to fetch data from Powerball API...');
+                results = await fetchFromApi(startDate, endDate);
+                source = "Powerball.com API";
+                console.log(`Successfully fetched ${results.length} drawings from API.`);
+            } catch (apiError) {
+                console.warn('API fetch failed, falling back to website parsing...');
                 
-                // Parse the content
-                const results = parseFromProvidedContent(contentToUse);
+                // If API fails, try website parsing
+                results = await fetchFromWebsite(startDate, endDate);
+                source = "Powerball.com website";
+                console.log(`Successfully fetched ${results.length} drawings from website.`);
+            }
+            
+            // If we got results, filter by date range
+            if (results && results.length > 0) {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999); // Include the entire end day
                 
-                // If we got results, filter by date range
-                if (results && results.length > 0) {
-                    const start = new Date(startDate);
-                    const end = new Date(endDate);
-                    
-                    // Add year if missing in date string
-                    const fixDate = (dateStr) => {
-                        if (!dateStr.includes(', 20')) {
-                            const parts = dateStr.split(', ');
-                            return `${parts[0]}, ${parts[1]}, 2025`;
-                        }
-                        return dateStr;
-                    };
-                    
-                    const filteredResults = results.filter(entry => {
+                // Add year if missing in date string
+                const fixDate = (dateStr) => {
+                    if (!dateStr.includes(', 20')) {
+                        const currentYear = new Date().getFullYear();
+                        const parts = dateStr.split(', ');
+                        return `${parts[0]}, ${parts[1]}, ${currentYear}`;
+                    }
+                    return dateStr;
+                };
+                
+                const filteredResults = results.filter(entry => {
+                    try {
                         const entryDate = new Date(fixDate(entry.date));
                         return entryDate >= start && entryDate <= end;
-                    });
-                    
-                    if (filteredResults.length === 0) {
-                        // If no results in date range, try fetching from website
-                        fetchFromWebsite(startDate, endDate)
-                            .then(data => {
-                                resolve({
-                                    data,
-                                    source: "Fetched directly from Powerball.com"
-                                });
-                            })
-                            .catch(error => {
-                                reject(new Error("No Powerball data found for the selected date range."));
-                            });
-                    } else {
-                        // Return filtered results
-                        resolve({
-                            data: filteredResults,
-                            source: "Powerball.com data for selected date range"
-                        });
+                    } catch (dateError) {
+                        console.warn(`Invalid date format: ${entry.date}`);
+                        return false;
                     }
-                } else {
-                    // Try fetching from website as fallback
-                    fetchFromWebsite(startDate, endDate)
-                        .then(data => {
-                            resolve({
-                                data,
-                                source: "Fetched directly from Powerball.com"
-                            });
-                        })
-                        .catch(error => {
-                            reject(new Error("Unable to retrieve Powerball data. Please check your input and try again."));
-                        });
-                }
-            } catch (error) {
-                console.error('Error in fetchData:', error);
-                reject(error);
+                });
+                
+                console.log(`Filtered to ${filteredResults.length} drawings within date range.`);
+                
+                return {
+                    data: filteredResults,
+                    source: `${filteredResults.length} drawings from ${source}`
+                };
+            } else {
+                throw new Error("No drawings found for the specified date range.");
             }
-        });
+        } catch (error) {
+            console.error('Error in fetchData:', error);
+            throw error;
+        }
     };
 
     // Public methods
     return {
         fetchData,
-        parseFromProvidedContent
+        parseHTML,
+        parseFromTextContent
     };
 })();
