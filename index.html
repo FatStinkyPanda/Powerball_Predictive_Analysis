@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Powerball Predictor</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Powerball Predictor</h1>
+        <p>Advanced pattern analysis for predicting Powerball numbers</p>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Select Date Range</h2>
+            <form id="date-form">
+                <div class="form-group">
+                    <label for="start-date">Start Date:</label>
+                    <input type="date" id="start-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="end-date">End Date:</label>
+                    <input type="date" id="end-date" required>
+                </div>
+                <div id="status-container"></div>
+                <button type="submit">Analyze Powerball Data</button>
+            </form>
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing Powerball data and generating predictions...</p>
+        </div>
+        
+        <div id="results" style="display: none;">
+            <div class="tabs">
+                <div class="tab active" data-tab="predictions">Predictions</div>
+                <div class="tab" data-tab="analysis">Analysis</div>
+                <div class="tab" data-tab="raw-data">Raw Data</div>
+            </div>
+            
+            <div id="predictions" class="tab-content active">
+                <div class="card">
+                    <h2>Top Prediction</h2>
+                    <p>Based on our advanced analysis, these numbers have the highest probability:</p>
+                    <div id="top-prediction" class="ball-container"></div>
+                    
+                    <div class="form-group">
+                        <label for="runner-up-count">Show runner-up predictions:</label>
+                        <select id="runner-up-count">
+                            <option value="0">None</option>
+                            <option value="1">1</option>
+                            <option value="3" selected>3</option>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                        </select>
+                    </div>
+                    
+                    <div id="runner-ups"></div>
+                </div>
+            </div>
+            
+            <div id="analysis" class="tab-content">
+                <div class="card">
+                    <h2>Number Frequency Analysis</h2>
+                    <div class="chart-container">
+                        <canvas id="frequency-chart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="grid">
+                    <div class="card">
+                        <h3>Hot Numbers (White Balls)</h3>
+                        <div id="hot-numbers" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Cold Numbers (White Balls)</h3>
+                        <div id="cold-numbers" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Hot Powerball Numbers</h3>
+                        <div id="hot-powerball" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Cold Powerball Numbers</h3>
+                        <div id="cold-powerball" class="stat-card"></div>
+                    </div>
+                </div>
+                
+                <div class="grid">
+                    <div class="card">
+                        <h3>Common Pairs</h3>
+                        <div id="common-pairs" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Rare Combinations</h3>
+                        <div id="rare-combinations" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Sum Analysis</h3>
+                        <div id="sum-analysis" class="stat-card"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Even/Odd Patterns</h3>
+                        <div id="even-odd-patterns" class="stat-card"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="raw-data" class="tab-content">
+                <div class="card">
+                    <h2>Historical Drawing Data</h2>
+                    <div id="data-source-info"></div>
+                    <div class="table-responsive">
+                        <table id="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th colspan="5">White Balls</th>
+                                    <th>Powerball</th>
+                                    <th>Power Play</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="footer">
+        <p>Disclaimer: This application is for entertainment purposes only. Past drawing results do not guarantee future outcomes.</p>
+    </footer>
+
+    <!-- Include JavaScript modules -->
+    <script src="fetcher.js"></script>
+    <script src="analyzer.js"></script>
+    <script src="predictor.js"></script>
+    <script src="ui.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
